@@ -13,8 +13,12 @@ int main(void) {
         p = strchr(buf, '&');
         *p = '\0';
         // 과제 11.10
-        strcpy(arg1, buf + 8);
-        strcpy(arg2, p + 9);
+        if (strchr(buf, "n")){
+            strcpy(arg1, buf + 8);
+            strcpy(arg2, p + 9);
+        }
+        strcpy(arg1, buf);
+        strcpy(arg2, p + 1);
         n1 = atoi(arg1);
         n2 = atoi(arg2);
     }
