@@ -16,6 +16,8 @@ void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
                  char *longmsg);
+void echo(int connfd); 
+
 
 int main(int argc, char **argv) {
   int listenfd, connfd;
@@ -37,6 +39,8 @@ int main(int argc, char **argv) {
     Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE,
                 0);
     printf("Accepted connection from (%s, %s)\n", hostname, port);
+    // echo(connfd);  // 과제 11.6 a
+    // Close(connfd);
     doit(connfd);   // line:netp:tiny:doit
     Close(connfd);  // line:netp:tiny:close
   }
@@ -95,7 +99,7 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
     sprintf(body, "%s<p>%s: %s\r\n", body, longmsg, cause);
     sprintf(body, "%s<hr><em>The Tiny Web server</em>\r\n", body);
 
-    sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
+    sprintf(buf, "HTTP/1.1 %s %s\r\n", errnum, shortmsg);
     Rio_writen(fd, buf, strlen(buf));
     sprintf(buf, "Content-type: text/html\r\n");
     Rio_writen(fd, buf, strlen(buf));
@@ -129,6 +133,8 @@ int parse_uri(char *uri, char *filename, char *cgiargs) {
     } else {
         ptr = index(uri, '?');
         if (ptr) {
+            // printf("‼️%s\n", uri);
+            // printf("%c\n", *ptr);
             strcpy(cgiargs, ptr + 1);
             *ptr = '\0';
         } else
@@ -144,7 +150,7 @@ void serve_static(int fd, char *filename, int filesize) {
     char *srcp, filetype[MAXLINE], buf[MAXBUF];
 
     get_filetype(filename, filetype);
-    sprintf(buf, "HTTP/1.0 200 OK\r\n");
+    sprintf(buf, "HTTP/1.1 200 OK\r\n");
     sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
     sprintf(buf, "%sConnection: close\r\n", buf);
     sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
@@ -153,11 +159,18 @@ void serve_static(int fd, char *filename, int filesize) {
     printf("Response headers: \n");
     printf("%s", buf);
 
+    // 과제 11.9
     srcfd = Open(filename, O_RDONLY, 0);
-    srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
+    // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
+
+    srcp = malloc(filesize);
+    Rio_readn(srcfd, srcp, filesize);
+    
     Close(srcfd);
     Rio_writen(fd, srcp, filesize);
-    Munmap(srcp, filesize);
+    // Munmap(srcp, filesize);
+    
+    free(srcp);
 }
 
 void get_filetype(char *filename, char *filetype) {
@@ -169,6 +182,8 @@ void get_filetype(char *filename, char *filetype) {
         strcpy(filetype, "image/png");
     else if (strstr(filename, ".jpg"))
         strcpy(filetype, "image/jpeg");
+    else if (strstr(filename, ".mpg"))  // 과제 11.7  mpg파일은 어떻게 해야할지...
+        strcpy(filetype, "video/mpeg-2");
     else
         strcpy(filetype, "text/plain");
 }
@@ -176,7 +191,7 @@ void get_filetype(char *filename, char *filetype) {
 void serve_dynamic(int fd, char *filename, char *cgiargs) {
     char buf[MAXLINE], *emptylist[] = {NULL};
 
-    sprintf(buf, "HTTP/1.0 200 OK\r\n");
+    sprintf(buf, "HTTP/1.1 200 OK\r\n");
     Rio_writen(fd, buf, strlen(buf));
     sprintf(buf, "Server: Tiny Web Server\r\n");
     Rio_writen(fd, buf, strlen(buf));
@@ -187,4 +202,19 @@ void serve_dynamic(int fd, char *filename, char *cgiargs) {
         Execve(filename, emptylist, environ);
     }
     Wait(NULL);
+}
+
+
+void echo(int connfd) {
+    size_t n;
+    char buf[MAXLINE];
+    rio_t rio;
+
+    Rio_readinitb(&rio, connfd);
+    n = Rio_readlineb(&rio, buf, MAXLINE);
+    while ((n = Rio_readlineb(&rio, buf, MAXLINE)) != 0) {
+        printf("server received %d bytes\n", (int)n);
+        printf("%s", buf);
+        Rio_writen(connfd, buf, n);
+    }
 }
